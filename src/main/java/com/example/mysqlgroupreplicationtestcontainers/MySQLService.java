@@ -1,6 +1,7 @@
 package com.example.mysqlgroupreplicationtestcontainers;
 
 import com.example.mysqlgroupreplicationtestcontainers.groupmember.GroupMember;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
@@ -17,9 +18,15 @@ import java.util.Set;
 
 @Slf4j
 public class MySQLService {
+    @Getter
+    private final String id;
+    @Getter
+    private final String hostName;
     private final ConnectionPool connectionPool;
 
-    public MySQLService(ConnectionPool connectionPool) {
+    public MySQLService(String id, String hostNamePrefix, ConnectionPool connectionPool) {
+        this.id = id;
+        this.hostName = hostNamePrefix + id;
         this.connectionPool = connectionPool;
     }
 

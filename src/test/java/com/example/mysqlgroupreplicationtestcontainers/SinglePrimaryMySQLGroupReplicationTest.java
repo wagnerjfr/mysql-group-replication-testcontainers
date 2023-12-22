@@ -22,24 +22,25 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Slf4j
 @SpringBootTest
 @Testcontainers
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class GroupReplicationMySQLServiceTest {
+class SinglePrimaryMySQLGroupReplicationTest {
 
-	private static final Logger logger = LoggerFactory.getLogger(GroupReplicationMySQLServiceTest.class);
+	private static final Logger logger = LoggerFactory.getLogger(SinglePrimaryMySQLGroupReplicationTest.class);
 
 	private static final String DOCKER_IMAGE = "mysql:8.0";
+	private static final String HOSTNAME_PREFIX = "node";
 	private static final String DATABASE_NAME = "Testcontainers";
 	private static int testCount;
 	private static boolean groupBootstrapped, nodesJoined;
@@ -47,28 +48,29 @@ class GroupReplicationMySQLServiceTest {
 
 	static Network network = Network.newNetwork();
 
-	static MySQLContainer<?> mySQLContainer1 = getContainer(Node.Node1);
+	static MySQLContainer<?> mySQLContainer1 = getContainer(1);
 
-	static MySQLContainer<?> mySQLContainer2 = getContainer(Node.Node2);
+	static MySQLContainer<?> mySQLContainer2 = getContainer(2);
 
-	static MySQLContainer<?> mySQLContainer3 = getContainer(Node.Node3);
+	static MySQLContainer<?> mySQLContainer3 = getContainer(3);
 
-	static MySQLService mySQLService1, mySQLService2, mySQLService3;
+	static MySQLService node1, node2, node3;
 
 	@BeforeAll
 	static void startDbs() throws SQLException {
-		mySQLService1 = startMySQLService(mySQLContainer1);
-		mySQLService2 = startMySQLService(mySQLContainer2);
-		mySQLService3 = startMySQLService(mySQLContainer3);
+		node1 = startMySQLService("1", mySQLContainer1);
+		node2 = startMySQLService("2", mySQLContainer2);
+		node3 = startMySQLService("3", mySQLContainer3);
 
-		for (MySQLService mySQLService : Arrays.asList(mySQLService1, mySQLService2, mySQLService3)) {
-			mySQLService.resetMaster();
-			assertTrue(mySQLService.getGlobalGtidExecuted().isEmpty());
+		List<MySQLService> nodes = Arrays.asList(node1, node2, node3);
+		for (MySQLService node : nodes) {
+			node.resetMaster();
+			assertTrue(node.getGlobalGtidExecuted().isEmpty(), "There are transactions in the database");
 		}
 
-		for (MySQLService mySQLService : Arrays.asList(mySQLService1, mySQLService2, mySQLService3)) {
-			mySQLService.installGroupReplicationPlugIn();
-			assertTrue(mySQLService.showPlugins().containsKey("group_replication"));
+		for (MySQLService node : nodes) {
+			node.installGroupReplicationPlugIn();
+			assertTrue(node.showPlugins().containsKey("group_replication"), "Plugin not found in the set");
 		}
 	}
 
@@ -91,20 +93,20 @@ class GroupReplicationMySQLServiceTest {
 	public void bootStrapGroupReplication() throws SQLException {
 		assertTrue(mySQLContainer1.isRunning());
 
-		final Node node = Node.Node1;
-		assertEquals(node.id, mySQLService1.getServerId());
+		assertEquals(node1.getId(), node1.getServerId());
 
 		try {
-			mySQLService1.bootStrapGroupReplication();
+			node1.bootStrapGroupReplication();
 		} catch (Exception e) {
 			log.error(mySQLContainer1.getLogs());
 			throw e;
 		}
 
-		Map<String, GroupMember> map = mySQLService1.getPerformanceSchemaReplicationGroupMembers();
+		Map<String, GroupMember> map = node1.getPerformanceSchemaReplicationGroupMembers();
 		assertEquals(1, map.keySet().size(), "It's expected to have just 1 member");
-		GroupMember member = map.get(node.hostName);
-		assertEquals(node.hostName, member.host());
+
+		GroupMember member = map.get(node1.getHostName());
+		assertEquals(node1.getHostName(), member.host(), "Hostname is different");
 		assertSinglePrimaryGR(member, "PRIMARY");
 		groupBootstrapped = true;
 	}
@@ -116,26 +118,26 @@ class GroupReplicationMySQLServiceTest {
 		Assumptions.assumeTrue(groupBootstrapped);
 
 		assertTrue(mySQLContainer2.isRunning());
-		assertEquals(Node.Node2.id, mySQLService2.getServerId());
+		assertEquals(node2.getId(), node2.getServerId());
 		try {
-			mySQLService2.joinGroupReplication();
+			node2.joinGroupReplication();
 		} catch (Exception e) {
 			log.error(mySQLContainer2.getLogs());
 			throw e;
 		}
 
-		assertEquals(Node.Node3.id, mySQLService3.getServerId());
+		assertEquals(node3.getId(), node3.getServerId());
 		try {
-			mySQLService3.joinGroupReplication();
+			node3.joinGroupReplication();
 		} catch (Exception e) {
 			log.error(mySQLContainer3.getLogs());
 			throw e;
 		}
 
-		Map<String, GroupMember> map = mySQLService1.getPerformanceSchemaReplicationGroupMembers();
-		for (Node node : Arrays.asList(Node.Node2, Node.Node3)) {
-			GroupMember member = map.get(node.hostName);
-			assertEquals(node.hostName, member.host());
+		Map<String, GroupMember> map = node1.getPerformanceSchemaReplicationGroupMembers();
+		for (MySQLService node : Arrays.asList(node2, node3)) {
+			GroupMember member = map.get(node.getHostName());
+			assertEquals(node.getHostName(), member.host(), "Hostname is different");
 			assertSinglePrimaryGR(member, "SECONDARY");
 		}
 		nodesJoined = true;
@@ -147,7 +149,7 @@ class GroupReplicationMySQLServiceTest {
 	public void creatingDatabaseInSecondaries() {
 		Assumptions.assumeTrue(nodesJoined);
 
-		for (MySQLService mySQLService : Arrays.asList(mySQLService2, mySQLService3)) {
+		for (MySQLService mySQLService : Arrays.asList(node2, node3)) {
 			Exception exception = assertThrows(SQLException.class, () -> mySQLService.createDatabase(DATABASE_NAME));
 			assertEquals("The MySQL server is running with the --super-read-only option so it cannot execute this statement", exception.getMessage());
 		}
@@ -159,13 +161,13 @@ class GroupReplicationMySQLServiceTest {
 	public void creatingDatabaseInPrimary() throws SQLException {
 		Assumptions.assumeTrue(nodesJoined);
 
-		for (MySQLService mySQLService : Arrays.asList(mySQLService1, mySQLService2, mySQLService3)) {
+		for (MySQLService mySQLService : Arrays.asList(node1, node2, node3)) {
 			assertFalse(mySQLService.showDatabases().contains(DATABASE_NAME), "Database exists.");
 		}
 
-		mySQLService1.createDatabase(DATABASE_NAME);
-		Set<String> databases = mySQLService1.showDatabases();
-		log.info("Source databases: {}", databases);
+		node1.createDatabase(DATABASE_NAME);
+		Set<String> databases = node1.showDatabases();
+		log.info("Primary databases: {}", databases);
 		assertTrue(databases.contains(DATABASE_NAME), "Database doesn't exist.");
 	}
 
@@ -175,18 +177,18 @@ class GroupReplicationMySQLServiceTest {
 	public void checkDatabaseInSecondaries() throws SQLException {
 		Assumptions.assumeTrue(nodesJoined);
 
-		for (MySQLService mySQLService : Arrays.asList(mySQLService2, mySQLService3)) {
+		for (MySQLService mySQLService : Arrays.asList(node2, node3)) {
 			Set<String> databases = mySQLService.showDatabases();
 			assertTrue(databases.contains(DATABASE_NAME), "Database doesn't exist.");
-			log.info("Source databases: {}", databases);
+			log.info("Secondary databases: {}", databases);
 		}
 	}
 
-	private static MySQLService startMySQLService(MySQLContainer<?> container) {
+	private static MySQLService startMySQLService(String id, MySQLContainer<?> container) {
 		container.start();
 		String url = container.getJdbcUrl();
 		ConnectionPool connectionPool =  new ConnectionPool(url, container.getUsername(), container.getPassword());
-		return new MySQLService(connectionPool);
+		return new MySQLService(id, HOSTNAME_PREFIX, connectionPool);
 	}
 
 	private static void stopMySQLService(MySQLContainer<?> container) {
@@ -195,17 +197,17 @@ class GroupReplicationMySQLServiceTest {
 		}
 	}
 
-	private static MySQLContainer<?> getContainer(final Node node) {
+	private static MySQLContainer<?> getContainer(int id) {
 		return new MySQLContainer<>(DOCKER_IMAGE)
 				//.withLogConsumer(new Slf4jLogConsumer(logger))
-				.withCommand(getCommand(node))
+				.withCommand(getCommand(id))
 				.withUsername("root")
 				.withPassword("mypass")
-				.withCreateContainerCmdModifier(it -> it.withHostName(node.hostName))
+				.withCreateContainerCmdModifier(it -> it.withHostName(HOSTNAME_PREFIX + id))
 				.withNetwork(network);
 	}
 
-	private static String getCommand(Node node) {
+	private static String getCommand(int id) {
 		return String.format("mysqld --server-id=%s " +
 				"--log-bin=mysql-bin-1.log --relay-log=relay-bin.log " +
 				"--enforce-gtid-consistency=ON " +
@@ -221,7 +223,7 @@ class GroupReplicationMySQLServiceTest {
 				"--loose-group-replication-local-address=%s:33061 " +
 				"--loose-group-replication-group-seeds=node1:33061,node2:33061,node3:33061 " +
 				"--loose-group-replication-single-primary-mode=ON " +
-				"--loose-group-replication-enforce-update-everywhere-checks=OFF", node.id, node.hostName);
+				"--loose-group-replication-enforce-update-everywhere-checks=OFF", id, HOSTNAME_PREFIX + id);
 	}
 
 	private void assertSinglePrimaryGR(GroupMember member, String type) {
@@ -229,16 +231,5 @@ class GroupReplicationMySQLServiceTest {
 		assertEquals("ONLINE", member.state());
 		assertEquals("3306", member.port());
 		assertEquals("XCom", member.communicationStack());
-	}
-
-	private enum Node {
-		Node1("1", "node1"), Node2("2", "node2"), Node3("3", "node3");
-
-		private final String id;
-		private final String hostName;
-		Node(String id, String hostName) {
-			this.id = id;
-			this.hostName = hostName;
-		}
 	}
 }
