@@ -13,8 +13,6 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.TestMethodOrder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.Network;
@@ -35,40 +33,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 @Testcontainers
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class SinglePrimaryMySQLGroupReplicationTest {
-
-	private static final Logger logger = LoggerFactory.getLogger(SinglePrimaryMySQLGroupReplicationTest.class);
+class SinglePrimaryGroupReplicationTest {
 
 	private static final String DOCKER_IMAGE = "mysql:8.0";
 	private static final String HOSTNAME_PREFIX = "node";
 	private static final String DATABASE_NAME = "Testcontainers";
+	private static final boolean SINGLE_PRIMARY = true;
 	private static int testCount;
 	private static boolean groupBootstrapped, nodesJoined;
 
 
 	static Network network = Network.newNetwork();
 
-	static MySQLContainer<?> mySQLContainer1 = getContainer(1);
+	static MySQLContainer<?> mySQLContainer1 = Utils.getContainer(DOCKER_IMAGE, 1, HOSTNAME_PREFIX, SINGLE_PRIMARY, network);
 
-	static MySQLContainer<?> mySQLContainer2 = getContainer(2);
+	static MySQLContainer<?> mySQLContainer2 = Utils.getContainer(DOCKER_IMAGE, 2, HOSTNAME_PREFIX, SINGLE_PRIMARY, network);
 
-	static MySQLContainer<?> mySQLContainer3 = getContainer(3);
+	static MySQLContainer<?> mySQLContainer3 = Utils.getContainer(DOCKER_IMAGE, 3, HOSTNAME_PREFIX, SINGLE_PRIMARY, network);
 
-	static MySQLService node1, node2, node3;
+	static MySQLServer node1, node2, node3;
 
 	@BeforeAll
 	static void startDbs() throws SQLException {
-		node1 = startMySQLService("1", mySQLContainer1);
-		node2 = startMySQLService("2", mySQLContainer2);
-		node3 = startMySQLService("3", mySQLContainer3);
+		node1 = Utils.startMySQLService("1", HOSTNAME_PREFIX, mySQLContainer1);
+		node2 = Utils.startMySQLService("2", HOSTNAME_PREFIX, mySQLContainer2);
+		node3 = Utils.startMySQLService("3", HOSTNAME_PREFIX, mySQLContainer3);
 
-		List<MySQLService> nodes = Arrays.asList(node1, node2, node3);
-		for (MySQLService node : nodes) {
+		List<MySQLServer> nodes = Arrays.asList(node1, node2, node3);
+		for (MySQLServer node : nodes) {
 			node.resetMaster();
 			assertTrue(node.getGlobalGtidExecuted().isEmpty(), "There are transactions in the database");
 		}
 
-		for (MySQLService node : nodes) {
+		for (MySQLServer node : nodes) {
 			node.installGroupReplicationPlugIn();
 			assertTrue(node.showPlugins().containsKey("group_replication"), "Plugin not found in the set");
 		}
@@ -76,9 +73,9 @@ class SinglePrimaryMySQLGroupReplicationTest {
 
 	@AfterAll
 	static void stopDbs(){
-		stopMySQLService(mySQLContainer1);
-		stopMySQLService(mySQLContainer2);
-		stopMySQLService(mySQLContainer3);
+		Utils.stopMySQLService(mySQLContainer1);
+		Utils.stopMySQLService(mySQLContainer2);
+		Utils.stopMySQLService(mySQLContainer3);
 		network.close();
 	}
 
@@ -107,7 +104,7 @@ class SinglePrimaryMySQLGroupReplicationTest {
 
 		GroupMember member = map.get(node1.getHostName());
 		assertEquals(node1.getHostName(), member.host(), "Hostname is different");
-		assertSinglePrimaryGR(member, "PRIMARY");
+		Utils.assertSinglePrimaryGR(member, "PRIMARY");
 		groupBootstrapped = true;
 	}
 
@@ -135,12 +132,13 @@ class SinglePrimaryMySQLGroupReplicationTest {
 		}
 
 		Map<String, GroupMember> map = node1.getPerformanceSchemaReplicationGroupMembers();
-		for (MySQLService node : Arrays.asList(node2, node3)) {
+		for (MySQLServer node : Arrays.asList(node2, node3)) {
 			GroupMember member = map.get(node.getHostName());
 			assertEquals(node.getHostName(), member.host(), "Hostname is different");
-			assertSinglePrimaryGR(member, "SECONDARY");
+			Utils.assertSinglePrimaryGR(member, "SECONDARY");
 		}
 		nodesJoined = true;
+		Utils.printGroupMembers(map);
 	}
 
 	@Test
@@ -149,8 +147,8 @@ class SinglePrimaryMySQLGroupReplicationTest {
 	public void creatingDatabaseInSecondaries() {
 		Assumptions.assumeTrue(nodesJoined);
 
-		for (MySQLService mySQLService : Arrays.asList(node2, node3)) {
-			Exception exception = assertThrows(SQLException.class, () -> mySQLService.createDatabase(DATABASE_NAME));
+		for (MySQLServer mySQLServer : Arrays.asList(node2, node3)) {
+			Exception exception = assertThrows(SQLException.class, () -> mySQLServer.createDatabase(DATABASE_NAME));
 			assertEquals("The MySQL server is running with the --super-read-only option so it cannot execute this statement", exception.getMessage());
 		}
 	}
@@ -161,8 +159,8 @@ class SinglePrimaryMySQLGroupReplicationTest {
 	public void creatingDatabaseInPrimary() throws SQLException {
 		Assumptions.assumeTrue(nodesJoined);
 
-		for (MySQLService mySQLService : Arrays.asList(node1, node2, node3)) {
-			assertFalse(mySQLService.showDatabases().contains(DATABASE_NAME), "Database exists.");
+		for (MySQLServer mySQLServer : Arrays.asList(node1, node2, node3)) {
+			assertFalse(mySQLServer.showDatabases().contains(DATABASE_NAME), "Database exists.");
 		}
 
 		node1.createDatabase(DATABASE_NAME);
@@ -177,59 +175,10 @@ class SinglePrimaryMySQLGroupReplicationTest {
 	public void checkDatabaseInSecondaries() throws SQLException {
 		Assumptions.assumeTrue(nodesJoined);
 
-		for (MySQLService mySQLService : Arrays.asList(node2, node3)) {
-			Set<String> databases = mySQLService.showDatabases();
+		for (MySQLServer mySQLServer : Arrays.asList(node2, node3)) {
+			Set<String> databases = mySQLServer.showDatabases();
 			assertTrue(databases.contains(DATABASE_NAME), "Database doesn't exist.");
 			log.info("Secondary databases: {}", databases);
 		}
-	}
-
-	private static MySQLService startMySQLService(String id, MySQLContainer<?> container) {
-		container.start();
-		String url = container.getJdbcUrl();
-		ConnectionPool connectionPool =  new ConnectionPool(url, container.getUsername(), container.getPassword());
-		return new MySQLService(id, HOSTNAME_PREFIX, connectionPool);
-	}
-
-	private static void stopMySQLService(MySQLContainer<?> container) {
-		if (container != null) {
-			container.stop();
-		}
-	}
-
-	private static MySQLContainer<?> getContainer(int id) {
-		return new MySQLContainer<>(DOCKER_IMAGE)
-				//.withLogConsumer(new Slf4jLogConsumer(logger))
-				.withCommand(getCommand(id))
-				.withUsername("root")
-				.withPassword("mypass")
-				.withCreateContainerCmdModifier(it -> it.withHostName(HOSTNAME_PREFIX + id))
-				.withNetwork(network);
-	}
-
-	private static String getCommand(int id) {
-		return String.format("mysqld --server-id=%s " +
-				"--log-bin=mysql-bin-1.log --relay-log=relay-bin.log " +
-				"--enforce-gtid-consistency=ON " +
-				"--log-slave-updates=ON " +
-				"--gtid-mode=ON " +
-				"--transaction-write-set-extraction=XXHASH64 " +
-				"--binlog-checksum=NONE " +
-				"--master-info-repository=TABLE " +
-				"--relay-log-info-repository=TABLE " +
-				"--relay-log-recovery=ON " +
-				"--loose-group-replication-start-on-boot=OFF " +
-				"--loose-group-replication-group-name=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee " +
-				"--loose-group-replication-local-address=%s:33061 " +
-				"--loose-group-replication-group-seeds=node1:33061,node2:33061,node3:33061 " +
-				"--loose-group-replication-single-primary-mode=ON " +
-				"--loose-group-replication-enforce-update-everywhere-checks=OFF", id, HOSTNAME_PREFIX + id);
-	}
-
-	private void assertSinglePrimaryGR(GroupMember member, String type) {
-		assertEquals(type, member.role());
-		assertEquals("ONLINE", member.state());
-		assertEquals("3306", member.port());
-		assertEquals("XCom", member.communicationStack());
 	}
 }

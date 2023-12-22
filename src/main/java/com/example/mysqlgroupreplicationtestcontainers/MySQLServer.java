@@ -17,14 +17,14 @@ import java.util.Map;
 import java.util.Set;
 
 @Slf4j
-public class MySQLService {
+public class MySQLServer {
     @Getter
     private final String id;
     @Getter
     private final String hostName;
     private final ConnectionPool connectionPool;
 
-    public MySQLService(String id, String hostNamePrefix, ConnectionPool connectionPool) {
+    public MySQLServer(String id, String hostNamePrefix, ConnectionPool connectionPool) {
         this.id = id;
         this.hostName = hostNamePrefix + id;
         this.connectionPool = connectionPool;
