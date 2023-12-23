@@ -65,7 +65,7 @@ class MultiPrimaryGroupReplicationTest {
 		}
 
 		for (MySQLServer node : nodes) {
-			node.installGroupReplicationPlugIn();
+			node.installGroupReplicationPlugin();
 			assertTrue(node.showPlugins().containsKey("group_replication"), "Plugin not found in the set");
 		}
 	}

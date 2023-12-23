@@ -62,7 +62,7 @@ public class MySQLServer {
         }
     }
 
-    public void installGroupReplicationPlugIn() throws SQLException {
+    public void installGroupReplicationPlugin() throws SQLException {
         try (Connection connection = this.connectionPool.getConnection()) {
             String query = "INSTALL PLUGIN group_replication SONAME 'group_replication.so';";
             PreparedStatement ps = connection.prepareStatement(query);
