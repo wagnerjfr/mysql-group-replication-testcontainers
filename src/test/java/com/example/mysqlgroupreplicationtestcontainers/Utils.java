@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @Slf4j
 public class Utils {
 
-    private static final Logger logger = LoggerFactory.getLogger(MultiPrimaryGroupReplicationTest.class);
+    private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
     public static MySQLContainer<?> getContainer(String dockerImage, int id, String hostNamePrefix, boolean isSinglePrimary, Network network) {
         return new MySQLContainer<>(dockerImage)
