@@ -8,10 +8,10 @@ emphasis will be on utilizing Testcontainers for testing interactions with MySQL
 ----------------------
 
 ## Full Articles
-###[Testing MySQL Single-Primary Group Replication]()
+### [Testing MySQL Single-Primary Group Replication]()
 _Developing an Integration Test With Spring Boot and Testcontainers_
 
-###[Testing MySQL Multi-Primary Group Replication]()
+### [Testing MySQL Multi-Primary Group Replication]()
 _Developing an Integration Test With Spring Boot and Testcontainers_
 
 ----------------------
