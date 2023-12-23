@@ -172,6 +172,7 @@ class MultiPrimaryGroupReplicationTest {
 
 		for (MySQLServer node : nodes) {
 			Set<String> databases = node.showDatabases();
+			log.info("Node databases: {}", databases);
 			assertTrue(databases.containsAll(DATABASE_NAME_LIST), "Node doesn't have all databases");
 		}
 	}

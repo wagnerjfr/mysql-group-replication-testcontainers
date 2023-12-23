@@ -177,8 +177,8 @@ class SinglePrimaryGroupReplicationTest {
 
 		for (MySQLServer mySQLServer : Arrays.asList(node2, node3)) {
 			Set<String> databases = mySQLServer.showDatabases();
-			assertTrue(databases.contains(DATABASE_NAME), "Database doesn't exist.");
 			log.info("Secondary databases: {}", databases);
+			assertTrue(databases.contains(DATABASE_NAME), "Database doesn't exist.");
 		}
 	}
 }
