@@ -146,7 +146,7 @@ class MultiPrimaryGroupReplicationTest {
 	@Test
 	@Order(3)
 	@DisplayName("Creating databases")
-	public void creatingDatabaseInPrimary() throws SQLException {
+	public void creatingDatabaseInPrimaries() throws SQLException {
 		Assumptions.assumeTrue(nodesJoined);
 
 		for (MySQLServer node : nodes) {
@@ -167,7 +167,7 @@ class MultiPrimaryGroupReplicationTest {
 	@Test
 	@Order(4)
 	@DisplayName("Checking whether databases are replicated")
-	public void checkDatabaseInSecondaries() throws SQLException {
+	public void checkDatabaseInPrimaries() throws SQLException {
 		Assumptions.assumeTrue(nodesJoined);
 
 		for (MySQLServer node : nodes) {
