@@ -11,8 +11,7 @@ emphasis will be on utilizing Testcontainers for testing interactions with MySQL
 ### [Testing MySQL Single-Primary Group Replication](https://levelup.gitconnected.com/testing-mysql-single-primary-group-replication-b5689c784cda)
 _Developing an Integration Test With Spring Boot and Testcontainers_
 
-_(coming soon)_
-### [Testing MySQL Multi-Primary Group Replication]()
+### [Testing MySQL Multi-Primary Group Replication](https://levelup.gitconnected.com/testing-mysql-multi-primary-group-replication-f46653294e3b)
 _Developing an Integration Test With Spring Boot and Testcontainers_
 
 ----------------------
